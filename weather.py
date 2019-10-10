@@ -3,42 +3,127 @@ import time
 import requests
 import json
 import pprint
+import telegram
+import sqlite3
+from telegram import InlineKeyboardButton,InlineKeyboardMarkup,KeyboardButton,ReplyKeyboardMarkup
+from telegram.ext import Updater,CommandHandler,MessageHandler,CallbackQueryHandler,Filters
+
 
 bot_token = "909999620:AAGA3pzw8ZPAa2lEM1Zp-pTPoqr719xPZiI"
 
-bot = telebot.TeleBot(bot_token)
+bot=telegram.Bot(token=bot_token)
+updater = Updater(token=bot_token,use_context=True)
+connection = sqlite3.connect('/Users/saravananmano/Desktop/Weather/weather.db',check_same_thread=False)
+print(connection)
 
+def start(update, context):
+	bot.send_message(chat_id=update.effective_chat.id, text='Hi, I am a weather bot')
 
-@bot.message_handler(commands = ['start'])
-def send_welcome(message):
-    bot.reply_to(message, 'Hey there! Enter a city name to find the weather!')
+def weather(update, context):
+	id = update.effective_chat.id
+	query = "SELECT * from city where id = {}".format(id)
+	cursor = connection.execute(query)
+	fetched = cursor.fetchall()
+	list_of_cities = list()
+	for each in fetched:
+		list_of_cities.append(each[1])
+	list_of_cities = list(set(list_of_cities))
+	button_list = []
+	i = 1
+	for each in list_of_cities:
+		button_list.append(InlineKeyboardButton(each, callback_data = each))
+		i+=1
+	#button_list=[InlineKeyboardButton('Cheese Chicken ',callback_data=1),InlineKeyboardButton('Mushroom Chicken ',callback_data=2)]
+	reply_markup=InlineKeyboardMarkup(build_menu(button_list,n_cols=1))
+	bot.send_message(chat_id=update.message.chat_id, text='Choose from the following',reply_markup=reply_markup)
+	
 
-    
-@bot.message_handler(func = lambda msg:msg.text is not None)
-def at_answer(message):
-	msg = message.text.split()
-	temperature = weather(msg[0])
-	if temperature != "invalid":
-		bot.reply_to(message, 'The temperature today is {}°C'.format(temperature))
+def database(id,city):
+	print(city)
+	connection.execute("INSERT INTO city VALUES(?,?)",(id,city))
+	connection.commit()
+	print('Added successfully!')
+
+def callback(update, context):
+	callbackquery = update.callback_query
+	city = callbackquery.data
+	if ("remove" not in city):
+		try:
+			api_address='http://api.openweathermap.org/data/2.5/weather?appid=fe77c384145449cdd1bbf0dc8b027998&q='
+			url = api_address + str(city)
+			json_data = requests.get(url).json()
+			pp = pprint.PrettyPrinter(indent=4) #reference
+			temp_in_kelvin = json_data['main']['temp']
+			temp_in_cel = int(temp_in_kelvin)-273.15
+			bot.send_message(chat_id=update.effective_chat.id, text='The current temperature in {} is {}°C'.format(city,round(temp_in_cel)))
+			print("Found!")
+		except:
+			bot.send_message(chat_id=update.effective_chat.id, text='The entered city name is invalid')
 	else:
-		bot.reply_to(message, 'Please enter a valid city!')
-	#bot.reply_to(message, 'https://www.instagram.com/{}'.format(instaid[1:]))
+		removequery(update.effective_chat.id,city)
 
-def weather(city):
-	try:
-		api_address='http://api.openweathermap.org/data/2.5/weather?appid=fe77c384145449cdd1bbf0dc8b027998&q='
-		url = api_address + str(city)
-		json_data = requests.get(url).json()
-		pp = pprint.PrettyPrinter(indent=4) #reference
-		temp_in_kelvin = json_data['main']['temp']
-		temp_in_cel = int(temp_in_kelvin)-273.15
-		return round(temp_in_cel)
-	except:
-		return "invalid"
+def findweather(update, context):
+	city = update.message.text
+	id = update.effective_chat.id
+	print(id,city)
+	database(id,city)
+
+def removequery(id,city):
+	city = city.split(",")[0]
+	query = "DELETE FROM city WHERE id = {} and name = '{}'".format(id,city)
+	q = connection.execute(query)
+	print(q)
+	connection.commit()
+	bot.send_message(chat_id=id, text='The city removed successfully!')
+	print('Removed!')
+
+def remove(update, context):
+	id = update.effective_chat.id
+	query = "SELECT * from city where id = {}".format(id)
+	cursor = connection.execute(query)
+	fetched = cursor.fetchall()
+	list_of_cities = list()
+	for each in fetched:
+		list_of_cities.append(each[1])
+	list_of_cities = list(set(list_of_cities))
+	button_list = []
+	i = 1
+	for each in list_of_cities:
+		button_list.append(InlineKeyboardButton(each, callback_data = each + ",remove"))
+		i+=1
+	#button_list=[InlineKeyboardButton('Cheese Chicken ',callback_data=1),InlineKeyboardButton('Mushroom Chicken ',callback_data=2)]
+	reply_markup=InlineKeyboardMarkup(build_menu(button_list,n_cols=1))
+	bot.send_message(chat_id=update.message.chat_id, text='Select the one to be removed',reply_markup=reply_markup)
 
 
-while True:
-    try:
-        bot.polling()
-    except Exception:
-        exit()
+
+def add(update, context):
+	bot.send_message(chat_id=update.effective_chat.id, text='Please enter the city to be added')
+
+
+
+def build_menu(buttons,n_cols,header_buttons=None,footer_buttons=None):
+    menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
+    if header_buttons:
+        menu.insert(0, header_buttons)
+    if footer_buttons:
+        menu.append(footer_buttons)
+    return menu
+
+def stop(update, context):
+	updater.stop()
+	bot.send_message(chat_id = update.effective_chat.id, text='See you soon!')
+
+updater.dispatcher.add_handler(CommandHandler('start',start))
+updater.dispatcher.add_handler(CommandHandler('weather',weather))
+updater.dispatcher.add_handler(CommandHandler('add',add))
+updater.dispatcher.add_handler(CommandHandler('stop',stop))
+updater.dispatcher.add_handler(CommandHandler('remove', remove))
+updater.dispatcher.add_handler(MessageHandler(Filters.text, findweather),group=0)
+#updater.dispatcher.add_handler(MessageHandler(Filters.text, jeez),group=2)
+updater.dispatcher.add_handler(CallbackQueryHandler(callback))
+updater.start_polling()
+
+
+
+
