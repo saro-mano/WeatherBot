@@ -1,4 +1,3 @@
-import telebot
 import time
 import requests
 import json
@@ -27,13 +26,10 @@ def weather(update, context):
 	list_of_cities = list()
 	for each in fetched:
 		list_of_cities.append(each[1])
-	list_of_cities = list(set(list_of_cities))
+	list_of_cities = list(set(list_of_cities)) #remove dups
 	button_list = []
-	i = 1
 	for each in list_of_cities:
 		button_list.append(InlineKeyboardButton(each, callback_data = each))
-		i+=1
-	#button_list=[InlineKeyboardButton('Cheese Chicken ',callback_data=1),InlineKeyboardButton('Mushroom Chicken ',callback_data=2)]
 	reply_markup=InlineKeyboardMarkup(build_menu(button_list,n_cols=1))
 	bot.send_message(chat_id=update.message.chat_id, text='Choose from the following',reply_markup=reply_markup)
 	
@@ -87,19 +83,14 @@ def remove(update, context):
 		list_of_cities.append(each[1])
 	list_of_cities = list(set(list_of_cities))
 	button_list = []
-	i = 1
 	for each in list_of_cities:
 		button_list.append(InlineKeyboardButton(each, callback_data = each + ",remove"))
-		i+=1
-	#button_list=[InlineKeyboardButton('Cheese Chicken ',callback_data=1),InlineKeyboardButton('Mushroom Chicken ',callback_data=2)]
 	reply_markup=InlineKeyboardMarkup(build_menu(button_list,n_cols=1))
 	bot.send_message(chat_id=update.message.chat_id, text='Select the one to be removed',reply_markup=reply_markup)
 
 
-
 def add(update, context):
 	bot.send_message(chat_id=update.effective_chat.id, text='Please enter the city to be added')
-
 
 
 def build_menu(buttons,n_cols,header_buttons=None,footer_buttons=None):
